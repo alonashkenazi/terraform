@@ -32,6 +32,9 @@ func (c *ShowCommand) Run(args []string) int {
 	cmdFlags := c.Meta.defaultFlagSet("show")
 	var jsonOutput bool
 	cmdFlags.BoolVar(&jsonOutput, "json", false, "produce JSON output")
+	var linkIds bool
+	cmdFlags.BoolVar(&linkIds, "link-ids", false, "populate unknown resource ids with the resource address")
+	fmt.Sprintf("alon link-ids::: %t", linkIds)
 	cmdFlags.Usage = func() { c.Ui.Error(c.Help()) }
 	if err := cmdFlags.Parse(args); err != nil {
 		c.Ui.Error(fmt.Sprintf("Error parsing command-line flags: %s\n", err.Error()))
@@ -144,6 +147,9 @@ func (c *ShowCommand) Run(args []string) int {
 	if plan != nil {
 		if jsonOutput == true {
 			config := ctx.Config()
+			if linkIds == true {
+				plan, _ = ctx.Plan()
+			}
 			jsonPlan, err := jsonplan.Marshal(config, plan, stateFile, schemas)
 
 			if err != nil {
@@ -202,6 +208,8 @@ Options:
   -no-color           If specified, output won't contain any color.
   -json               If specified, output the Terraform plan or state in
                       a machine-readable form.
+  -link-ids			  If specified, will replace the unknown resource ids in
+					  the Terraform plan with the resource address 
 
 `
 	return strings.TrimSpace(helpText)

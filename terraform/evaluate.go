@@ -536,7 +536,6 @@ func (d *evaluationStateData) GetResource(addr addrs.Resource, rng tfdiags.Sourc
 	}
 
 	rs := d.Evaluator.State.Resource(addr.Absolute(d.ModulePath))
-
 	if rs == nil {
 		// we must return DynamicVal so that both interpretations
 		// can proceed without generating errors, and we'll deal with this
@@ -556,9 +555,31 @@ func (d *evaluationStateData) GetResource(addr addrs.Resource, rng tfdiags.Sourc
 	return d.getResourceInstancesAll(addr, rng, config, rs, rs.ProviderConfig)
 }
 
+func populateUnknownValues(val cty.Value, addr addrs.Resource, modulePath addrs.ModuleInstance, index string) cty.Value {
+	var valAsMap = val.AsValueMap()
+	var changed = false
+	var idByAddress = addr.String()
+	if modulePath.String() != "" {
+		idByAddress = modulePath.String() + "." + idByAddress
+	}
+	if index != "" {
+		idByAddress = idByAddress + "[" + index + "]"
+	}
+	for key := range valAsMap {
+		if !valAsMap[key].IsKnown() {
+			changed = true
+			valAsMap[key] = cty.StringVal(idByAddress + "." + key)
+		}
+	}
+	if changed {
+		return cty.ObjectVal(valAsMap)
+	} else {
+		return val
+	}
+}
+
 func (d *evaluationStateData) getResourceInstancesAll(addr addrs.Resource, rng tfdiags.SourceRange, config *configs.Resource, rs *states.Resource, providerAddr addrs.AbsProviderConfig) (cty.Value, tfdiags.Diagnostics) {
 	var diags tfdiags.Diagnostics
-
 	instAddr := addrs.ResourceInstance{Resource: addr, Key: addrs.NoKey}
 
 	schema := d.getResourceSchema(addr, providerAddr)
@@ -598,6 +619,7 @@ func (d *evaluationStateData) getResourceInstancesAll(addr addrs.Resource, rng t
 					})
 					return cty.UnknownVal(ty), diags
 				}
+				val = populateUnknownValues(val, addr, d.ModulePath, "")
 				return val, diags
 			} else {
 				// If the object is in planned status then we should not
@@ -668,7 +690,7 @@ func (d *evaluationStateData) getResourceInstancesAll(addr addrs.Resource, rng t
 						})
 						continue
 					}
-					vals[i] = val
+					vals[i] = populateUnknownValues(val, addr, d.ModulePath, strconv.Itoa(i))
 					continue
 				} else {
 					// If the object is in planned status then we should not
@@ -696,7 +718,7 @@ func (d *evaluationStateData) getResourceInstancesAll(addr addrs.Resource, rng t
 				})
 				continue
 			}
-			vals[i] = ios.Value
+			vals[i] = populateUnknownValues(ios.Value, addr, d.ModulePath, strconv.Itoa(i))
 		}
 
 		// We use a tuple rather than a list here because resource schemas may
@@ -730,7 +752,7 @@ func (d *evaluationStateData) getResourceInstancesAll(addr addrs.Resource, rng t
 							})
 							continue
 						}
-						vals[string(sk)] = val
+						vals[string(sk)] = populateUnknownValues(val, addr, d.ModulePath, string(sk))
 						continue
 					} else {
 						// If the object is in planned status then we should not
